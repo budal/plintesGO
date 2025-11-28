@@ -1,6 +1,6 @@
 services:
   postgres:
-    container_name: plintes_postgres
+    container_name: plintesgo_postgres
     image: postgis/postgis:16-3.4-alpine
     restart: unless-stopped
     networks:
@@ -19,7 +19,7 @@ services:
     command: -p ${DB_PORT:-5432}
 
   pgadmin:
-    container_name: plintes_pgadmin
+    container_name: plintesgo_pgadmin
     image: dpage/pgadmin4
     entrypoint: /usr/local/bin/setup-pgadmin.sh
     restart: unless-stopped
@@ -50,7 +50,7 @@ services:
       - postgres
 
   redis:
-    container_name: plintes_redis
+    container_name: plintesgo_redis
     image: redis:alpine
     restart: unless-stopped
     networks:
@@ -62,7 +62,7 @@ services:
     command: /bin/sh -c "redis-server --port ${REDIS_PORT:-6379} --requirepass ${REDIS_PASSWORD:-redis}"
 
   redis-commander:
-    container_name: plintes_redis-commander
+    container_name: plintesgo_redis-commander
     image: rediscommander/redis-commander
     restart: unless-stopped
     networks:
@@ -80,7 +80,7 @@ services:
       - redis
 
   rabbitmq:
-    container_name: plintes_rabbitmq
+    container_name: plintesgo_rabbitmq
     image: rabbitmq:3-management
     restart: unless-stopped
     networks:
@@ -99,18 +99,18 @@ services:
 
   nats:
     image: nats:2-alpine
-    container_name: plintes_nats
+    container_name: plintesgo_nats
     ports:
       - "4222:4222"
       - "8222:8222"
 
   go:
-    container_name: plintes_go
+    container_name: plintesgo_go
     build:
       context: .
       dockerfile: ./docker/go/Dockerfile
       target: ${APP_ENV:-development}
-    image: plintes_go
+    image: plintesgo_go
     restart: always
     networks:
       - internal_network
@@ -137,7 +137,7 @@ services:
       - nats
 
   # vite:
-  #   container_name: plintes_vite
+  #   container_name: plintesgo_vite
   #   image: node:alpine
   #   restart: unless-stopped
   #   networks:
@@ -159,7 +159,7 @@ services:
   #   user: root
   
   mailpit:
-    container_name: plintes_mailpit
+    container_name: plintesgo_mailpit
     image: axllent/mailpit:latest
     restart: unless-stopped
     networks:
@@ -174,7 +174,7 @@ services:
       MP_UI_BIND_ADDR: "0.0.0.0:${MAILSERVER_PORT:-7070}"
 
   elasticsearch:
-    container_name: plintes_elasticsearch
+    container_name: plintesgo_elasticsearch
     image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
     restart: unless-stopped
     networks:
@@ -195,7 +195,7 @@ services:
       - elasticsearch-data-volume:/usr/share/elasticsearch/data
 
   kibana:
-    container_name: plintes_kibana
+    container_name: plintesgo_kibana
     image: docker.elastic.co/kibana/kibana:8.10.2
     restart: unless-stopped
     networks:
@@ -213,7 +213,7 @@ services:
       - elasticsearch
 
   logstash:
-    container_name: plintes_logstash
+    container_name: plintesgo_logstash
     image: docker.elastic.co/logstash/logstash:8.10.2
     restart: unless-stopped
     networks:
