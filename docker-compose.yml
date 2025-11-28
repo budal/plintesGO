@@ -1,0 +1,249 @@
+services:
+  postgres:
+    container_name: plintes_postgres
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${DB_PORT:-5432}:${DB_PORT:-5432}
+    volumes:
+      - postgres-volume:/var/lib/postgresql/data
+      - ./docker/postgresql/scripts/:/docker-entrypoint-initdb.d/
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-db_plintes}
+      POSTGRES_USER: ${DB_USERNAME:-plintes}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    command: -p ${DB_PORT:-5432}
+
+  pgadmin:
+    container_name: plintes_pgadmin
+    image: dpage/pgadmin4
+    entrypoint: /usr/local/bin/setup-pgadmin.sh
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${PGADMIN_PORT:-5050}:${PGADMIN_PORT:-5050}
+    volumes:
+      - pgadmin-volume:/var/lib/pgadmin
+      - ./docker/postgresql/setup-pgadmin.sh:/usr/local/bin/setup-pgadmin.sh
+    env_file:
+      - .env
+    environment:
+      APP_NAME: ${APP_NAME:-Plintes}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USERNAME: ${DB_USERNAME:-plintes}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      PGADMIN_LISTEN_PORT: ${PGADMIN_PORT:-5050}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_SERVER_JSON_FILE: "/var/lib/pgadmin/servers"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+      GUNICORN_ACCESS_LOGFILE: "/dev/null"
+    depends_on:
+      - postgres
+
+  redis:
+    container_name: plintes_redis
+    image: redis:alpine
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${REDIS_PORT:-6379}:${REDIS_PORT:-6379}
+    volumes:
+      - redis-volume:/data
+    command: /bin/sh -c "redis-server --port ${REDIS_PORT:-6379} --requirepass ${REDIS_PASSWORD:-redis}"
+
+  redis-commander:
+    container_name: plintes_redis-commander
+    image: rediscommander/redis-commander
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${REDIS_COMMANDER_PORT:-6060}:${REDIS_COMMANDER_PORT:-6060}
+    env_file:
+      - .env
+    environment:
+      PORT: ${REDIS_COMMANDER_PORT:-6060}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis}
+    depends_on:
+      - redis
+
+  rabbitmq:
+    container_name: plintes_rabbitmq
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${RABBITMQ_PORT:-5672}:5672
+      - ${RABBITMQ_UI_PORT:-15672}:15672
+    volumes:
+      - rabbitmq-data-volume:/var/lib/rabbitmq/
+      - rabbitmq-log-volume:/var/log/rabbitmq/
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+
+  nats:
+    image: nats:2-alpine
+    container_name: plintes_nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  go:
+    container_name: plintes_go
+    build:
+      context: .
+      dockerfile: ./docker/go/Dockerfile
+      target: ${APP_ENV:-development}
+    image: plintes_go
+    restart: always
+    networks:
+      - internal_network
+    ports:
+      - "3000:3000"
+    working_dir: /app
+    volumes:
+      - ./server:/app
+      - /app/tmp
+    environment:
+      PORT: 3000
+      DB_HOST: postgres
+      DB_USER: plintes
+      DB_PASS: plintes
+      DB_NAME: plintes
+      REDIS_HOST: redis:6379
+      NATS_URL: nats://nats:4222
+    command: ["air"]
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+      - nats
+
+  # vite:
+  #   container_name: plintes_vite
+  #   image: node:alpine
+  #   restart: unless-stopped
+  #   networks:
+  #     - internal_network
+  #   ports:
+  #     - ${VITE_PORT:-5173}:${VITE_PORT:-5173}
+  #   volumes:
+  #     - ./app/.env.example:/var/www/.env
+  #     - ./app/package.json:/var/www/package.json
+  #     - ./app:/var/www
+  #     - php-vendor-volume:/var/www/vendor
+  #     - node-modules-volume:/var/www/node_modules
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     NODE_OPTIONS: "--no-warnings"
+  #   working_dir: /var/www/
+  #   command: sh -c "npm install && npm run dev"
+  #   user: root
+  
+  mailpit:
+    container_name: plintes_mailpit
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${MAIL_PORT:-1025}:${MAIL_PORT:-1025}
+      - ${MAILSERVER_PORT:-7070}:${MAILSERVER_PORT:-7070}
+    env_file:
+      - .env
+    environment:
+      MP_SMTP_BIND_ADDR: "0.0.0.0:${MAIL_PORT:-1025}"
+      MP_UI_BIND_ADDR: "0.0.0.0:${MAILSERVER_PORT:-7070}"
+
+  elasticsearch:
+    container_name: plintes_elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${ELASTICSEARCH_PORT:-9200}:${ELASTICSEARCH_PORT:-9200}
+    env_file:
+      - .env
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-plintes}
+      ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD:-plintes}
+      network.host: 0.0.0.0
+      http.port: ${ELASTICSEARCH_PORT:-9200}
+      xpack.security.enabled: false
+    volumes:
+      - elasticsearch-data-volume:/usr/share/elasticsearch/data
+
+  kibana:
+    container_name: plintes_kibana
+    image: docker.elastic.co/kibana/kibana:8.10.2
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${KIBANA_PORT:-5601}:5601
+    env_file:
+      - .env
+    environment:
+      ELASTICSEARCH_HOSTS: "http://elasticsearch:${ELASTICSEARCH_PORT:-9200}"
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-plintes}
+      ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD:-plintes}
+      node.options: "--no-open-ssl-legacy-provider"
+    depends_on:
+      - elasticsearch
+
+  logstash:
+    container_name: plintes_logstash
+    image: docker.elastic.co/logstash/logstash:8.10.2
+    restart: unless-stopped
+    networks:
+      - internal_network
+    ports:
+      - ${LOGSTASH_PORT:-5044}:5044
+      - ${LOGSTASH_HTTP_PORT:-9600}:9600
+    env_file:
+      - .env
+    environment:
+      LS_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - ./docker/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./docker/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+    depends_on:
+      - elasticsearch
+
+networks:
+  internal_network:
+    driver: bridge
+
+volumes:
+  pgadmin-volume:
+  postgres-volume:
+  redis-volume:
+  php-vendor-volume:
+  node-modules-volume:
+  storage-volume:
+  ocr-processed-volume:
+  reverb-volume:
+  rabbitmq-data-volume:
+  rabbitmq-log-volume:
+  elasticsearch-data-volume:
